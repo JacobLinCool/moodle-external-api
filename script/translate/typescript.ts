@@ -1,36 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-
-type FunctionDefinition = {
-	name: string;
-	parameters_desc: Description;
-	returns_desc: Description;
-	description: string;
-};
-
-interface PrimativeDescription {
-	desc: string;
-	type: string;
-	allownull?: boolean;
-	required?: number;
-	default?: unknown;
-}
-
-interface ArrayDescription {
-	desc: string;
-	required?: number;
-	default?: unknown;
-	content: Description;
-}
-
-interface ObjectDescription {
-	desc: string;
-	required?: number;
-	default?: unknown;
-	keys: Record<string, Description>;
-}
-
-type Description = PrimativeDescription | ArrayDescription | ObjectDescription;
+import type {
+	FunctionDefinition,
+	Description,
+	PrimativeDescription,
+	ArrayDescription,
+	ObjectDescription,
+} from "./types";
 
 function camelfy(str: string): string {
 	return (

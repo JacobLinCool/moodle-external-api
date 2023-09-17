@@ -1,36 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import type {
+	FunctionDefinition,
+	Description,
+	PrimativeDescription,
+	ArrayDescription,
+	ObjectDescription,
+} from "./types";
 
-type FunctionDefinition = {
-	name: string;
-	parameters_desc: Description;
-	returns_desc: Description;
-	description: string;
-};
-
-interface PrimativeDescription {
-	desc: string;
-	type: string;
-	allownull?: boolean;
-	required?: number;
-	default?: unknown;
-}
-
-interface ArrayDescription {
-	desc: string;
-	required?: number;
-	default?: unknown;
-	content: Description;
-}
-
-interface ObjectDescription {
-	desc: string;
-	required?: number;
-	default?: unknown;
-	keys: Record<string, Description>;
-}
-
-type Description = PrimativeDescription | ArrayDescription | ObjectDescription;
+const MARK_ALL_OPTIONAL = !!process.env.MARK_ALL_OPTIONAL;
+const MOODLE_RS = !!process.env.MOODLE_RS;
 
 function snakefy(str: string): string {
 	return str.replace(/[A-Z]/g, (letter) => "_" + letter.toLowerCase());
@@ -88,7 +67,9 @@ class Builder {
 
 	protected primative(description: PrimativeDescription): string {
 		const rs = translate_type(description.type);
-		return description.allownull ? `Option<${rs}>` : rs;
+		return MARK_ALL_OPTIONAL || description.allownull
+			? `Option<${rs}>`
+			: rs;
 	}
 
 	protected array(name: string, description: ArrayDescription): string {
@@ -136,16 +117,32 @@ class Builder {
 function make(raw: string): string {
 	const builder = new Builder();
 	const def: FunctionDefinition = JSON.parse(raw);
-	const params = builder.build(
-		snakefy(def.name) + "_params",
-		def.parameters_desc,
-	);
-	const returns = builder.build(
-		snakefy(def.name) + "_returns",
-		def.returns_desc,
-	);
+	const params_type = "Params";
+	const params = builder.build(params_type, def.parameters_desc);
+	const returns_type = "Returns";
+	const returns = builder.build(returns_type, def.returns_desc);
 
-	return params + "\n" + returns;
+	const call = `
+pub async fn call<'a>(
+	client: &'a mut crate::client::MoodleClient,
+	params: &'a mut ${params_type},
+) -> anyhow::Result<${returns_type}> {
+	let json = client
+		.post(
+			"${def.name}",
+			params,
+		)
+		.await?;
+
+	serde_json::from_value(json).map_err(|e| e.into())
+}`;
+
+	return (
+		params +
+		"\n" +
+		returns +
+		(params && returns && MOODLE_RS ? "\n" + call : "")
+	);
 }
 
 const root = path.resolve(__dirname, "..", "..", "functions");
