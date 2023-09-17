@@ -1,0 +1,23 @@
+{
+  "name": "moodle-external-api",
+  "author": "JacobLinCool <jacoblincool@gmail.com> (https://github.com/JacobLinCool)",
+  "version": "0.1.0",
+  "description": "",
+  "main": "functions.json",
+  "keywords": [
+    "moodle"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "split": "tsx script/split.ts",
+    "translate:ts": "tsx script/translate/typescript.ts",
+    "translate:rs": "tsx script/translate/rust.ts",
+    "format": "prettier --write typescript/**/*.d.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.6.2",
+    "prettier": "^3.0.3",
+    "tsx": "^3.12.10",
+    "typescript": "^5.2.2"
+  }
+}
