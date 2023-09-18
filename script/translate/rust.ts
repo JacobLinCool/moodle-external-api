@@ -9,6 +9,7 @@ import type {
 } from "./types";
 
 const MARK_ALL_OPTIONAL = !!process.env.MARK_ALL_OPTIONAL;
+const MARK_RETURNS_OPTIONAL = !!process.env.MARK_RETURNS_OPTIONAL;
 const MOODLE_RS = !!process.env.MOODLE_RS;
 
 function snakefy(str: string): string {
@@ -44,9 +45,11 @@ function translate_type(type: string): string {
 
 class Builder {
 	protected content = "";
+	protected soft = false;
 
-	public build(name: string, desc: Description | null): string {
+	public build(name: string, desc: Description | null, soft = false): string {
 		this.content = "";
+		this.soft = soft;
 		this._build(name, desc);
 		return this.content;
 	}
@@ -67,13 +70,14 @@ class Builder {
 
 	protected primative(description: PrimativeDescription): string {
 		const rs = translate_type(description.type);
-		return MARK_ALL_OPTIONAL || description.allownull
+		return this.soft || description.allownull || description.default !== 1
 			? `Option<${rs}>`
 			: rs;
 	}
 
 	protected array(name: string, description: ArrayDescription): string {
-		const rs = camelfy(name) + "Item";
+		name = camelfy(name);
+		const rs = name + "Item";
 		const item = this._build(rs, description.content);
 		let out = description.desc
 			? description.desc
@@ -81,9 +85,14 @@ class Builder {
 					.map((d) => `/// ${d}\n`)
 					.join("\n")
 			: "";
-		out += `pub type r#${camelfy(name)} = Vec<${item}>;\n\n`;
+
+		out += `pub type r#${name} = Vec<${
+			item.startsWith("Option<") ? item.slice(7, -1) : item
+		}>;\n\n`;
 		this.content += out;
-		return camelfy(name);
+		return this.soft || description.default !== 1
+			? `Option<r#${name}>`
+			: `r#${name}`;
 	}
 
 	protected object(name: string, description: ObjectDescription): string {
@@ -110,7 +119,9 @@ class Builder {
 		}
 		out += "}\n\n";
 		this.content += out;
-		return name;
+		return this.soft || description.default !== 1
+			? `Option<${name}>`
+			: name;
 	}
 }
 
@@ -118,13 +129,21 @@ function make(raw: string): string {
 	const builder = new Builder();
 	const def: FunctionDefinition = JSON.parse(raw);
 	const params_type = "Params";
-	const params = builder.build(params_type, def.parameters_desc);
+	const params = builder.build(
+		params_type,
+		def.parameters_desc,
+		MARK_ALL_OPTIONAL,
+	);
 	const returns_type = "Returns";
-	const returns = builder.build(returns_type, def.returns_desc);
+	const returns = builder.build(
+		returns_type,
+		def.returns_desc,
+		MARK_RETURNS_OPTIONAL || MARK_ALL_OPTIONAL,
+	);
 
 	const call = `
 pub async fn call<'a>(
-	client: &'a mut crate::client::MoodleClient,
+	client: &'a mut moodle_client::MoodleClient,
 	params: &'a mut ${params_type},
 ) -> anyhow::Result<${returns_type}> {
 	let json = client
@@ -138,7 +157,7 @@ pub async fn call<'a>(
 }
 
 pub async fn call_raw<'a>(
-    client: &'a mut crate::client::MoodleClient,
+    client: &'a mut moodle_client::MoodleClient,
     params: &'a mut ${params_type},
 ) -> anyhow::Result<serde_json::Value> {
     client.post("${def.name}", params).await
