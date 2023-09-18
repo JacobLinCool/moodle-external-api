@@ -135,6 +135,13 @@ pub async fn call<'a>(
 		.await?;
 
 	serde_json::from_value(json).map_err(|e| e.into())
+}
+
+pub async fn call_raw<'a>(
+    client: &'a mut crate::client::MoodleClient,
+    params: &'a mut ${params_type},
+) -> anyhow::Result<serde_json::Value> {
+    client.post("${def.name}", params).await
 }`;
 
 	return (
