@@ -116,17 +116,19 @@ class Builder {
 	}
 }
 
+const completed = new Map<string, [string, string]>();
+
 function make(raw: string): string {
 	const builder = new Builder();
 	const def: FunctionDefinition = JSON.parse(raw);
-	const params = builder.build(
-		camelfy(def.name) + "Params",
-		def.parameters_desc,
-	);
-	const returns = builder.build(
-		camelfy(def.name) + "Returns",
-		def.returns_desc,
-	);
+	const params = builder.build("Params", def.parameters_desc);
+	const returns = builder.build("Returns", def.returns_desc);
+
+	if (params && returns) {
+		const [namespace, type, ...rest] = def.name.split("_");
+		const module = `${namespace}.${type}.${rest.join("_")}`;
+		completed.set(def.name, [`${module}.Params`, `${module}.Returns`]);
+	}
 
 	return params + "\n" + returns;
 }
@@ -163,5 +165,52 @@ for (const namespace of namespaces) {
 			fs.writeFileSync(out, ts);
 			console.log("Wrote", out);
 		}
+
+		// Write the index.ts file
+		const index_path = path.join(
+			typescript_root,
+			namespace,
+			type,
+			"index.ts",
+		);
+		fs.writeFileSync(
+			index_path,
+			definitions
+				.map(
+					(d) =>
+						`export * as ${path.basename(
+							d,
+							".json",
+						)} from "./${path.basename(d, ".json")}";`,
+				)
+				.join("\n"),
+		);
 	}
+
+	// Write the index.ts file
+	const index_path = path.join(typescript_root, namespace, "index.ts");
+	fs.writeFileSync(
+		index_path,
+		types.map((d) => `export * as ${d} from "./${d}";`).join("\n"),
+	);
 }
+
+// Write the index.ts file
+const index_path = path.join(typescript_root, "index.ts");
+fs.writeFileSync(
+	index_path,
+	namespaces
+		.map(
+			(d) =>
+				`import * as ${d} from "./${d}";\nexport * as ${d} from "./${d}";`,
+		)
+		.join("\n") +
+		`\n\nexport type FunctionDefinition = {\n` +
+		[...completed.entries()]
+			.map(
+				([name, [params, returns]]) =>
+					`    "${name}": [${params}, ${returns}]`,
+			)
+			.join(",\n") +
+		`\n};\n`,
+);
